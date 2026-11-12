@@ -1,14 +1,14 @@
-/* Light Glass Card v1.0.1
+/* Light Glass Card v1.1.0
  * Glassmorphism Lovelace light control. No external dependencies.
  */
 class LightGlassCard extends HTMLElement {
   static getStubConfig() {
-    return { type: "custom:light-glass-card", entity: "light.lampe_balkon_links", name: "Lampe Balkon links", card_width: "auto" };
+    return { type: "custom:light-glass-card", entity: "light.lampe_balkon_links", group_name: "Balkon", name: "Lampe Links", card_width: "auto" };
   }
 
   setConfig(config) {
     if (!config || !config.entity) throw new Error("Light Glass Card: Bitte eine light-Entität angeben.");
-    this.config = { name: "Licht", card_width: "auto", show_status: true, show_brightness: true, ...config };
+    this.config = { group_name: "Balkon", name: "Lampe Links", card_width: "auto", show_brightness: true, ...config };
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     this._lastSignature = null;
     this._render();
@@ -43,89 +43,92 @@ class LightGlassCard extends HTMLElement {
     const actualBrightness = entity.attributes?.brightness;
     const actualPercent = actualBrightness == null ? (on ? 100 : 0) : Math.round(Number(actualBrightness) / 255 * 100);
     const percent = this._pendingBrightness ?? actualPercent;
-    const name = c.name || entity.attributes?.friendly_name || "Licht";
-    const status = on ? "Ein" : "Aus";
-    const width = c.card_width === "auto" ? "100%" : `${Math.max(280, Math.min(1200, Number(c.card_width) || 560))}px`;
-    const showDimmer = dimmable && c.show_brightness !== false;
+    const groupName = c.group_name || "Licht";
+    const name = c.name || entity.attributes?.friendly_name || "Lampe";
+    const width = c.card_width === "auto" ? "100%" : `${Math.max(260, Math.min(1200, Number(c.card_width) || 420))}px`;
+    const showDimmer = dimmable && c.show_brightness !== false && on;
 
     this.shadowRoot.innerHTML = `
       <style>
-        :host{display:block;width:100%;color:#f7f3ee}
-        ha-card{width:${width};max-width:100%;margin:0;box-sizing:border-box;overflow:visible;border:0;border-radius:0;background:transparent;box-shadow:none}
-        .stack{display:flex;flex-direction:column;gap:12px}
-        .glass{position:relative;overflow:hidden;box-sizing:border-box;border-radius:999px;border:1px solid rgba(238,232,224,.72);
-          background:${on ? "linear-gradient(108deg,rgba(35,33,32,.90) 0%,rgba(49,42,37,.88) 48%,rgba(111,62,24,.86) 100%)" : "linear-gradient(108deg,rgba(34,32,31,.92) 0%,rgba(48,42,38,.88) 58%,rgba(78,51,30,.82) 100%)"};
-          box-shadow:0 8px 24px rgba(0,0,0,.30),inset 0 1px 0 rgba(255,255,255,.48),inset 0 -1px 0 rgba(255,255,255,.14);
-          -webkit-backdrop-filter:blur(24px) saturate(135%);backdrop-filter:blur(24px) saturate(135%)}
-        .glass:before{content:"";position:absolute;inset:5px;border-radius:inherit;border:1px solid rgba(255,255,255,.19);pointer-events:none}
-        .glass:after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(128deg,rgba(255,255,255,.17) 0%,rgba(255,255,255,.045) 24%,transparent 43%,transparent 70%,${on ? "rgba(255,153,45,.18)" : "rgba(255,174,98,.075)"} 100%);pointer-events:none}
-        .main{height:112px;padding:14px 22px;display:flex;align-items:center;gap:22px}
-        .bulb{width:58px;height:58px;flex:none;display:grid;place-items:center;color:#ffb36c;filter:drop-shadow(0 0 8px rgba(255,169,82,.62));position:relative;z-index:1}
-        .bulb ha-icon{--mdc-icon-size:43px}
-        .divider{width:1px;height:58px;flex:none;background:rgba(255,255,255,.43);position:relative;z-index:1}
-        .name{font-size:clamp(18px,2.6vw,28px);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto;position:relative;z-index:1}
-        .status{font-size:clamp(17px,2.5vw,27px);font-weight:550;color:${on ? "#ffb36c" : "#aaa19a"};white-space:nowrap;position:relative;z-index:1;margin-left:4px}
-        .spacer{flex:1;min-width:8px}
-        button{font:inherit}
-        .power{width:66px;height:66px;flex:none;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:#fff8ef;background:rgba(255,255,255,.035);border:2px solid rgba(255,255,255,.84);box-shadow:inset 0 1px 4px rgba(255,255,255,.18),${on ? "0 0 17px rgba(255,170,75,.42)" : "0 2px 8px rgba(0,0,0,.22)"};position:relative;z-index:1;transition:transform .15s,background .2s,box-shadow .2s}
-        .power:active{transform:scale(.94)}.power ha-icon{--mdc-icon-size:32px}
-        .dimmer{height:78px;padding:10px 25px;display:flex;align-items:center;gap:20px;border-radius:999px}
-        .sun{width:30px;flex:none;color:#e8ded2;position:relative;z-index:1}.sun ha-icon{--mdc-icon-size:31px}
-        .min{color:#bdb5ae;font-size:19px;white-space:nowrap;position:relative;z-index:1}
-        .value{color:#ffb36c;font-size:23px;font-weight:650;min-width:72px;text-align:right;font-variant-numeric:tabular-nums;position:relative;z-index:1}
-        input[type=range]{position:relative;z-index:1;display:block;flex:1;min-width:45px;width:100%;height:12px;margin:0;border-radius:30px;appearance:none;outline:none;cursor:pointer;background:linear-gradient(to right,#ffad63 0%,#ffad63 ${percent}%,rgba(255,255,255,.24) ${percent}%,rgba(255,255,255,.24) 100%);box-shadow:inset 0 1px 2px rgba(0,0,0,.20)}
-        input[type=range]::-webkit-slider-thumb{appearance:none;width:30px;height:30px;border-radius:50%;background:#ffad63;border:5px solid #fff5e9;box-shadow:0 2px 9px rgba(0,0,0,.42),0 0 10px rgba(255,172,96,.28)}
-        input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:#ffad63;border:5px solid #fff5e9;box-shadow:0 2px 9px rgba(0,0,0,.42)}
-        @media(max-width:520px){.stack{gap:9px}.main{height:86px;padding:10px 13px;gap:11px}.bulb{width:42px;height:48px}.bulb ha-icon{--mdc-icon-size:34px}.divider{height:42px}.name{font-size:clamp(15px,4vw,20px)}.status{font-size:clamp(14px,3.8vw,18px);margin-left:0}.power{width:50px;height:50px;border-width:2px}.power ha-icon{--mdc-icon-size:25px}.dimmer{height:62px;padding:8px 13px;gap:10px}.sun{width:23px}.sun ha-icon{--mdc-icon-size:24px}.min{font-size:14px}.value{font-size:17px;min-width:52px}input[type=range]{height:9px}input[type=range]::-webkit-slider-thumb{width:24px;height:24px;border-width:4px}input[type=range]::-moz-range-thumb{width:14px;height:14px;border-width:4px}}
-        @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+        :host{display:block;width:100%;color:#f5f3f1}
+        ha-card{width:${width};max-width:100%;box-sizing:border-box;margin:0;padding:0;border-radius:34px;
+          background:linear-gradient(145deg,rgba(43,42,42,.94),rgba(23,23,24,.96));
+          border:1px solid rgba(255,255,255,.16);
+          box-shadow:0 10px 28px rgba(0,0,0,.30),inset 0 1px 2px rgba(255,255,255,.13),inset 0 -2px 5px rgba(0,0,0,.42);
+          overflow:hidden;-webkit-backdrop-filter:blur(22px) saturate(120%);backdrop-filter:blur(22px) saturate(120%)}
+        .shell{padding:18px 16px 17px;position:relative}
+        .shell:before{content:"";position:absolute;inset:5px;border-radius:29px;border:1px solid rgba(255,255,255,.075);pointer-events:none}
+        .heading{font-size:clamp(20px,3vw,27px);font-weight:750;line-height:1.2;margin:3px 8px 25px;letter-spacing:-.35px;color:#faf9f8}
+        .device{height:100px;display:flex;align-items:center;gap:17px;padding:8px 17px 8px 8px;border-radius:999px;
+          background:linear-gradient(180deg,rgba(210,205,199,.28) 0%,rgba(110,106,103,.25) 15%,rgba(54,52,52,.83) 55%,rgba(36,35,35,.92) 100%);
+          border:1px solid rgba(239,235,230,.58);
+          box-shadow:inset 0 2px 3px rgba(255,255,255,.36),inset 0 -3px 6px rgba(0,0,0,.55),0 2px 7px rgba(0,0,0,.25);
+          position:relative;overflow:hidden}
+        .device:before{content:"";position:absolute;inset:4px;border-radius:inherit;border:1px solid rgba(255,255,255,.10);pointer-events:none}
+        .icon-button{width:82px;height:82px;flex:none;border-radius:50%;display:grid;place-items:center;cursor:pointer;
+          color:${on ? "#ffbd82" : "#f4f3f1"};
+          background:linear-gradient(145deg,rgba(225,222,218,.43),rgba(83,81,80,.42) 48%,rgba(36,35,35,.78));
+          border:1px solid rgba(255,255,255,.42);
+          box-shadow:inset 0 2px 5px rgba(255,255,255,.40),inset 0 -4px 7px rgba(0,0,0,.42),0 2px 5px rgba(0,0,0,.25);
+          position:relative;z-index:1;transition:transform .15s,filter .2s}
+        .icon-button:active{transform:scale(.95)}
+        .icon-button ha-icon{--mdc-icon-size:35px;filter:${on ? "drop-shadow(0 0 7px rgba(255,170,98,.72))" : "none"}}
+        .labels{display:flex;flex-direction:column;justify-content:center;gap:7px;min-width:0;position:relative;z-index:1}
+        .lamp-name{font-size:clamp(19px,2.7vw,26px);font-weight:750;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff}
+        .status{font-size:clamp(16px,2.3vw,21px);font-weight:500;color:${on ? "#ffbd82" : "#c7c4c3"};line-height:1.1}
+        .dimmer{margin-top:12px;padding:12px 17px;min-height:58px;display:flex;align-items:center;gap:14px;border-radius:999px;
+          background:linear-gradient(180deg,rgba(185,180,175,.23),rgba(54,52,52,.72));
+          border:1px solid rgba(238,232,225,.40);box-shadow:inset 0 1px 3px rgba(255,255,255,.23),inset 0 -2px 5px rgba(0,0,0,.35)}
+        .sun{flex:none;color:#eee9e3}.sun ha-icon{--mdc-icon-size:24px}
+        .range{flex:1;min-width:40px;height:9px;margin:0;appearance:none;border-radius:99px;outline:none;cursor:pointer;
+          background:linear-gradient(to right,#ffb779 0%,#ffb779 ${percent}%,rgba(255,255,255,.23) ${percent}%,rgba(255,255,255,.23) 100%)}
+        .range::-webkit-slider-thumb{appearance:none;width:23px;height:23px;border-radius:50%;background:#ffb779;border:4px solid #f8f2ec;box-shadow:0 2px 7px rgba(0,0,0,.42)}
+        .range::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:#ffb779;border:4px solid #f8f2ec;box-shadow:0 2px 7px rgba(0,0,0,.42)}
+        .percent{min-width:45px;text-align:right;color:#f6c092;font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+        @media(max-width:480px){.shell{padding:14px 12px}.heading{margin:2px 7px 18px;font-size:21px}.device{height:82px;gap:12px;padding:6px 13px 6px 6px}.icon-button{width:68px;height:68px}.icon-button ha-icon{--mdc-icon-size:30px}.lamp-name{font-size:19px}.status{font-size:16px}.dimmer{min-height:52px;padding:9px 13px;gap:10px}}
       </style>
-      <ha-card><div class="stack">
-        <div class="glass main">
-          <div class="bulb"><ha-icon icon="mdi:lightbulb"></ha-icon></div>
-          <div class="divider"></div>
-          <div class="name">${this._esc(name)}</div>
-          ${c.show_status === false ? "" : `<div class="status">${status}</div>`}
-          <div class="spacer"></div>
-          <button class="power" type="button" aria-label="Licht ${on ? "ausschalten" : "einschalten"}" title="${on ? "Ausschalten" : "Einschalten"}"><ha-icon icon="mdi:power"></ha-icon></button>
+      <ha-card><div class="shell">
+        <div class="heading">${this._esc(groupName)}</div>
+        <div class="device">
+          <button class="icon-button" type="button" aria-label="${on ? "Lampe ausschalten" : "Lampe einschalten"}" title="${on ? "Ausschalten" : "Einschalten"}">
+            <ha-icon icon="${on ? "mdi:lightbulb" : "mdi:lightbulb-off"}"></ha-icon>
+          </button>
+          <div class="labels">
+            <div class="lamp-name">${this._esc(name)}</div>
+            <div class="status">${on ? "Ein" : "Aus"}</div>
+          </div>
         </div>
-        ${showDimmer ? `<div class="glass dimmer">
+        ${showDimmer ? `<div class="dimmer">
           <div class="sun"><ha-icon icon="mdi:brightness-6"></ha-icon></div>
-          <span class="min">0 %</span>
-          <input class="brightness" type="range" min="0" max="100" step="1" value="${Math.max(0,Math.min(100,percent))}" aria-label="Helligkeit einstellen">
-          <span class="value">${percent} %</span>
-          ${!on ? `<span class="offhint">Helligkeit für das nächste Einschalten wählen</span>` : ""}
+          <input class="range" type="range" min="1" max="100" step="1" value="${Math.max(1,Math.min(100,percent))}" aria-label="Helligkeit einstellen">
+          <span class="percent">${percent} %</span>
         </div>` : ""}
       </div></ha-card>`;
 
-    this.shadowRoot.querySelector(".power")?.addEventListener("click", () => {
+    this.shadowRoot.querySelector(".icon-button")?.addEventListener("click", () => {
       if (!this._hass) return;
-      if (on) {
-        this._hass.callService("light", "turn_off", { entity_id: c.entity });
-      } else {
+      if (on) this._hass.callService("light", "turn_off", { entity_id: c.entity });
+      else {
         const data = { entity_id: c.entity };
         if (this._pendingBrightness != null) data.brightness_pct = Math.max(1, this._pendingBrightness);
         this._hass.callService("light", "turn_on", data);
         this._pendingBrightness = null;
       }
     });
-
-    const slider = this.shadowRoot.querySelector(".brightness");
+    const slider = this.shadowRoot.querySelector(".range");
     if (slider) {
       slider.addEventListener("input", event => {
         const value = Number(event.target.value);
         this._pendingBrightness = value;
-        const valueNode = this.shadowRoot.querySelector(".value");
-        if (valueNode) valueNode.textContent = `${value} %`;
-        event.target.style.background = `linear-gradient(to right,#ffb36f 0%,#ffb36f ${value}%,rgba(255,255,255,.23) ${value}%,rgba(255,255,255,.23) 100%)`;
+        const node = this.shadowRoot.querySelector(".percent");
+        if (node) node.textContent = `${value} %`;
+        event.target.style.background = `linear-gradient(to right,#ffb779 0%,#ffb779 ${value}%,rgba(255,255,255,.23) ${value}%,rgba(255,255,255,.23) 100%)`;
       });
       slider.addEventListener("change", event => {
         if (!this._hass) return;
-        const value = Math.max(0, Math.min(100, Number(event.target.value)));
-        if (on) {
-          this._pendingBrightness = null;
-          this._hass.callService("light", "turn_on", { entity_id: c.entity, brightness_pct: Math.max(1, value) });
-        }
-        // While off, keep the selected value locally; the next power-on applies it.
+        const value = Math.max(1, Math.min(100, Number(event.target.value)));
+        this._pendingBrightness = null;
+        this._hass.callService("light", "turn_on", { entity_id: c.entity, brightness_pct: value });
       });
     }
   }
@@ -146,9 +149,9 @@ class LightGlassCardEditor extends HTMLElement {
     form.data = { ...this._config };
     form.schema = [
       { name: "entity", required: true, selector: { entity: { domain: "light" } } },
+      { name: "group_name", selector: { text: {} } },
       { name: "name", selector: { text: {} } },
       { name: "card_width", selector: { select: { options: [{ label: "Automatisch", value: "auto" }, { label: "320 px", value: "320" }, { label: "400 px", value: "400" }, { label: "480 px", value: "480" }, { label: "560 px", value: "560" }], mode: "dropdown" } } },
-      { name: "show_status", selector: { boolean: {} } },
       { name: "show_brightness", selector: { boolean: {} } }
     ];
     form.addEventListener("value-changed", event => {
