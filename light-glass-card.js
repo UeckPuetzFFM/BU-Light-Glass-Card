@@ -1,4 +1,4 @@
-/* Light Glass Card v1.1.0
+/* Light Glass Card v1.2.0
  * Glassmorphism Lovelace light control. No external dependencies.
  */
 class LightGlassCard extends HTMLElement {
@@ -47,6 +47,12 @@ class LightGlassCard extends HTMLElement {
     const name = c.name || entity.attributes?.friendly_name || "Lampe";
     const width = c.card_width === "auto" ? "100%" : `${Math.max(260, Math.min(1200, Number(c.card_width) || 420))}px`;
     const showDimmer = dimmable && c.show_brightness !== false && on;
+    const expanded = this._optionsOpen === true;
+    const attrs = entity.attributes || {};
+    const supportsColorTemp = Array.isArray(attrs.supported_color_modes) && attrs.supported_color_modes.some(mode => mode === "color_temp" || mode === " color_temp ") || attrs.color_temp_kelvin !== undefined || attrs.color_temp !== undefined;
+    const minKelvin = Number(attrs.min_color_temp_kelvin || (attrs.max_mireds ? Math.round(1000000 / attrs.max_mireds) : 2000));
+    const maxKelvin = Number(attrs.max_color_temp_kelvin || (attrs.min_mireds ? Math.round(1000000 / attrs.min_mireds) : 6500));
+    const currentKelvin = Number(attrs.color_temp_kelvin || (attrs.color_temp ? Math.round(1000000 / attrs.color_temp) : minKelvin));
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -58,7 +64,22 @@ class LightGlassCard extends HTMLElement {
           overflow:hidden;-webkit-backdrop-filter:blur(22px) saturate(120%);backdrop-filter:blur(22px) saturate(120%)}
         .shell{padding:18px 16px 17px;position:relative}
         .shell:before{content:"";position:absolute;inset:5px;border-radius:29px;border:1px solid rgba(255,255,255,.075);pointer-events:none}
-        .heading{font-size:clamp(20px,3vw,27px);font-weight:750;line-height:1.2;margin:3px 8px 25px;letter-spacing:-.35px;color:#faf9f8}
+        .heading-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:3px 5px 20px}
+        .heading{font-size:clamp(20px,3vw,27px);font-weight:750;line-height:1.2;letter-spacing:-.35px;color:#faf9f8;min-width:0}
+        .gear{width:38px;height:38px;flex:none;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:#e9e4df;
+          background:linear-gradient(145deg,rgba(225,222,218,.28),rgba(54,52,52,.72));border:1px solid rgba(255,255,255,.24);
+          box-shadow:inset 0 1px 3px rgba(255,255,255,.18),0 2px 5px rgba(0,0,0,.22);transition:transform .18s,color .18s}
+        .gear[aria-expanded="true"]{color:#ffbd82;transform:rotate(35deg)}
+        .gear ha-icon{--mdc-icon-size:21px}
+        .options{margin-top:13px;padding:15px 16px 16px;border-radius:22px;background:linear-gradient(145deg,rgba(65,62,60,.76),rgba(29,28,28,.94));
+          border:1px solid rgba(239,235,230,.30);box-shadow:inset 0 1px 3px rgba(255,255,255,.14),0 4px 12px rgba(0,0,0,.22)}
+        .options-title{font-size:13px;text-transform:uppercase;letter-spacing:1.1px;color:#c9c2bc;font-weight:700;margin:0 0 12px}
+        .presets{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+        .preset{min-height:38px;border-radius:12px;color:#f7f3ef;background:rgba(255,255,255,.075);border:1px solid rgba(255,255,255,.17);font:600 14px inherit;cursor:pointer}
+        .preset:active{background:rgba(255,189,130,.22)}
+        .option-label{display:flex;justify-content:space-between;gap:12px;margin:14px 1px 8px;color:#e7e0da;font-size:14px}
+        .temp-range{width:100%;accent-color:#ffb779;cursor:pointer}
+        .options-hint{font-size:13px;color:#bdb6b0;margin:0}
         .device{height:100px;display:flex;align-items:center;gap:17px;padding:8px 17px 8px 8px;border-radius:999px;
           background:linear-gradient(180deg,rgba(210,205,199,.28) 0%,rgba(110,106,103,.25) 15%,rgba(54,52,52,.83) 55%,rgba(36,35,35,.92) 100%);
           border:1px solid rgba(239,235,230,.58);
@@ -85,10 +106,15 @@ class LightGlassCard extends HTMLElement {
         .range::-webkit-slider-thumb{appearance:none;width:23px;height:23px;border-radius:50%;background:#ffb779;border:4px solid #f8f2ec;box-shadow:0 2px 7px rgba(0,0,0,.42)}
         .range::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:#ffb779;border:4px solid #f8f2ec;box-shadow:0 2px 7px rgba(0,0,0,.42)}
         .percent{min-width:45px;text-align:right;color:#f6c092;font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
-        @media(max-width:480px){.shell{padding:14px 12px}.heading{margin:2px 7px 18px;font-size:21px}.device{height:82px;gap:12px;padding:6px 13px 6px 6px}.icon-button{width:68px;height:68px}.icon-button ha-icon{--mdc-icon-size:30px}.lamp-name{font-size:19px}.status{font-size:16px}.dimmer{min-height:52px;padding:9px 13px;gap:10px}}
+        @media(max-width:480px){.shell{padding:14px 12px}.heading{font-size:21px}.heading-row{margin:2px 7px 16px}.device{height:82px;gap:12px;padding:6px 13px 6px 6px}.icon-button{width:68px;height:68px}.icon-button ha-icon{--mdc-icon-size:30px}.lamp-name{font-size:19px}.status{font-size:16px}.dimmer{min-height:52px;padding:9px 13px;gap:10px}.options{padding:13px 12px}.presets{gap:6px}.preset{font-size:13px}}
       </style>
       <ha-card><div class="shell">
-        <div class="heading">${this._esc(groupName)}</div>
+        <div class="heading-row">
+          <div class="heading">${this._esc(groupName)}</div>
+          <button class="gear" type="button" aria-label="Zusatzoptionen" aria-expanded="${expanded}" title="Zusatzoptionen">
+            <ha-icon icon="mdi:cog-outline"></ha-icon>
+          </button>
+        </div>
         <div class="device">
           <button class="icon-button" type="button" aria-label="${on ? "Lampe ausschalten" : "Lampe einschalten"}" title="${on ? "Ausschalten" : "Einschalten"}">
             <ha-icon icon="${on ? "mdi:lightbulb" : "mdi:lightbulb-off"}"></ha-icon>
@@ -103,7 +129,35 @@ class LightGlassCard extends HTMLElement {
           <input class="range" type="range" min="1" max="100" step="1" value="${Math.max(1,Math.min(100,percent))}" aria-label="Helligkeit einstellen">
           <span class="percent">${percent} %</span>
         </div>` : ""}
+        ${expanded ? `<section class="options" aria-label="Zusatzoptionen">
+          <div class="options-title">Zusatzoptionen</div>
+          ${dimmable ? `<div class="presets">
+            ${[25,50,75,100].map(value => `<button class="preset" type="button" data-brightness="${value}">${value} %</button>`).join("")}
+          </div>` : `<p class="options-hint">Für diese Leuchte sind keine Helligkeitsstufen verfügbar.</p>`}
+          ${supportsColorTemp ? `<div class="option-label"><span>Farbtemperatur</span><strong class="temp-value">${currentKelvin} K</strong></div>
+            <input class="temp-range" type="range" min="${minKelvin}" max="${maxKelvin}" step="50" value="${Math.min(maxKelvin,Math.max(minKelvin,currentKelvin))}" aria-label="Farbtemperatur einstellen">` : ""}
+        </section>` : ""}
       </div></ha-card>`;
+
+    this.shadowRoot.querySelector(".gear")?.addEventListener("click", () => {
+      this._optionsOpen = !this._optionsOpen;
+      this._render();
+    });
+    this.shadowRoot.querySelectorAll(".preset").forEach(button => button.addEventListener("click", () => {
+      const value = Number(button.dataset.brightness);
+      this._pendingBrightness = value;
+      this._hass?.callService("light", "turn_on", { entity_id: c.entity, brightness_pct: value });
+    }));
+    const tempSlider = this.shadowRoot.querySelector(".temp-range");
+    if (tempSlider) {
+      tempSlider.addEventListener("input", event => {
+        const label = this.shadowRoot.querySelector(".temp-value");
+        if (label) label.textContent = `${event.target.value} K`;
+      });
+      tempSlider.addEventListener("change", event => {
+        this._hass?.callService("light", "turn_on", { entity_id: c.entity, color_temp_kelvin: Number(event.target.value) });
+      });
+    }
 
     this.shadowRoot.querySelector(".icon-button")?.addEventListener("click", () => {
       if (!this._hass) return;
@@ -168,4 +222,4 @@ class LightGlassCardEditor extends HTMLElement {
 if (!customElements.get("light-glass-card")) customElements.define("light-glass-card", LightGlassCard);
 if (!customElements.get("light-glass-card-editor")) customElements.define("light-glass-card-editor", LightGlassCardEditor);
 window.customCards = window.customCards || [];
-if (!window.customCards.some(card => card.type === "light-glass-card")) window.customCards.push({ type: "light-glass-card", name: "Light Glass Card", description: "Glass-Karte für Ein/Aus und Helligkeit von Home-Assistant-Lichtern." });
+if (!window.customCards.some(card => card.type === "light-glass-card")) window.customCards.push({ type: "light-glass-card", name: "Light Glass Card", description: "Glass-Karte für Ein/Aus, Helligkeit und Zusatzoptionen von Home-Assistant-Lichtern." });
